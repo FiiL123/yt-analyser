@@ -1,3 +1,4 @@
+import json
 import os
 
 from django.shortcuts import redirect, render
@@ -12,7 +13,8 @@ def home(request):
         form = UploadFileForm(request.POST, request.FILES)
         # print(request.FILES["file"])
         if form.is_valid():
-            handle_uploaded_file(request.FILES["file"])
+            path = handle_uploaded_file(request.FILES["file"])
+            process_history_json(path)
             return redirect("home")
     else:
         form = UploadFileForm()
@@ -30,3 +32,10 @@ def handle_uploaded_file(uploaded_file):
             destination.write(chunk)
 
     return upload_path
+
+
+def process_history_json(file_path):
+    with open(file_path, "r") as f:
+        data = json.load(f)
+        for record in data:
+            print(record["title"])
