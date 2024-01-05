@@ -1,6 +1,7 @@
 import os
 
 import orjson as json
+from django.db.models import Count
 from django.shortcuts import redirect, render
 
 from web import settings as web_settings
@@ -10,10 +11,18 @@ from .forms import UploadFileForm
 
 
 def home(request):
+    top_creators = Creator.objects.order_by("-times_watched")[:10]
+    top_videos = (
+        VideoRecord.objects.values("title").annotate(times_watched=Count("title")).order_by("-times_watched")[:10]
+    )
+
     context = {
         "videos_count": VideoRecord.objects.count(),
         "videos": VideoRecord.objects.all(),
         "creator_count": Creator.objects.count(),
+        "creators": Creator.objects.all(),
+        "top_creators": top_creators,
+        "top_videos": top_videos,
     }
 
     return render(request, "home.html", context)

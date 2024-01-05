@@ -5,5 +5,27 @@
         <h3 class="text-center">
             Between {{ videos.last.time_watched|date:"d M Y" }} and {{ videos.first.time_watched|date:"d M Y" }}.
         </h3>
+        <div class="container-sm mt-5">
+            <h2 class="text-center">Most watched creators</h2>
+            <ol class="list-group list-group-numbered">
+                {% for c in top_creators %}
+                    <li class="list-group-item list-group-item-secondary d-flex justify-content-between align-items-center">
+                        <span class="creator-name">{{ c.name }}</span>
+                        <span class="badge bg-light text-dark fs-6">{{ c.times_watched }}</span>
+                    </li>
+                {% endfor %}
+            </ol>
+        </div>
+        <div class="container-sm mt-5">
+            <h2 class="text-center">Most watched videos</h2>
+            <ol class="list-group list-group-numbered">
+                {% for v in top_videos %}
+                    <li class="list-group-item list-group-item-secondary d-flex justify-content-between align-items-center">
+                        <span class="creator-name">{{ v.title }}</span>
+                        <span class="badge bg-light text-dark fs-6">{{ v.times_watched }}</span>
+                    </li>
+                {% endfor %}
+            </ol>
+        </div>
     </div>
 {% endblock content %}
