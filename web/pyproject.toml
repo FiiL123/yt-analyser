@@ -4,3 +4,6 @@ line-length = 121
 
 [tool.black]
 line-length = 121
+
+[tool.djlint]
+ignore="H021"

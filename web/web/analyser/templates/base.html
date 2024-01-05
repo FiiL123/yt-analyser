@@ -8,6 +8,8 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0 " />
         {% load bootstrap5 %}
         {% bootstrap_css %} {% bootstrap_javascript %}
+        {% load static %}
+        <script src="{% static 'echarts.min.js' %}"></script>
         <title>
             {% block title %}
                 YouTube history analyzer
