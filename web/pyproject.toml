@@ -4,6 +4,10 @@ line-length = 121
 
 [tool.black]
 line-length = 121
-
+exclude = '''
+/(
+  | migrations
+)/
+'''
 [tool.djlint]
 ignore="H021"
