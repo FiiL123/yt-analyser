@@ -4,13 +4,17 @@ import orjson as json
 from django.shortcuts import redirect, render
 
 from web import settings as web_settings
-from web.analyser.models import VideoRecord
+from web.analyser.models import Creator, VideoRecord
 
 from .forms import UploadFileForm
 
 
 def home(request):
-    context = {"count": VideoRecord.objects.count(), "videos": VideoRecord.objects.all()}
+    context = {
+        "videos_count": VideoRecord.objects.count(),
+        "videos": VideoRecord.objects.all(),
+        "creator_count": Creator.objects.count(),
+    }
 
     return render(request, "home.html", context)
 
@@ -34,7 +38,6 @@ def handle_uploaded_file(uploaded_file):
     os.makedirs(os.path.dirname(upload_path), exist_ok=True)
     # Save the file to the server
     with open(upload_path, "wb+") as destination:
-
         for chunk in uploaded_file.chunks():
             destination.write(chunk)
 
@@ -42,6 +45,7 @@ def handle_uploaded_file(uploaded_file):
 
 
 def process_history_json(file_path):
+    Creator.objects.all().delete()
     VideoRecord.objects.all().delete()
     with open(file_path, "r") as f:
         data = json.loads(f.read())
@@ -49,7 +53,13 @@ def process_history_json(file_path):
         for record in data:
             if "subtitles" in record:
                 title = record["title"][8:]
-                creator = record["subtitles"][0]["name"]
+                creator_name = record["subtitles"][0]["name"]
+                if c := Creator.objects.filter(name=creator_name):
+                    creator = c.get()
+                    creator.times_watched = creator.times_watched + 1
+                else:
+                    creator = Creator.create(creator_name, record["subtitles"][0]["url"])
+                creator.save()
                 time_watched = record["time"]
                 url = "missing"
                 if "titleUrl" in record:
