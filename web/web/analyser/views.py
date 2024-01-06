@@ -3,6 +3,7 @@ import os
 import orjson as json
 from django.db.models import Count
 from django.shortcuts import redirect, render
+from yt_dlp import YoutubeDL
 
 from web import settings as web_settings
 from web.analyser.models import Creator, VideoRecord
@@ -15,6 +16,11 @@ def home(request):
     top_videos = (
         VideoRecord.objects.values("title").annotate(times_watched=Count("title")).order_by("-times_watched")[:10]
     )
+    top_categories = (
+        VideoRecord.objects.values("categories")
+        .annotate(times_watched=Count("categories"))
+        .order_by("-times_watched")[:10]
+    )
 
     context = {
         "videos_count": VideoRecord.objects.count(),
@@ -23,6 +29,7 @@ def home(request):
         "creators": Creator.objects.all(),
         "top_creators": top_creators,
         "top_videos": top_videos,
+        "top_categories": top_categories,
     }
 
     return render(request, "home.html", context)
@@ -73,7 +80,39 @@ def process_history_json(file_path):
                 url = "missing"
                 if "titleUrl" in record:
                     url = record["titleUrl"]
-
-                video = VideoRecord.create(title, creator, time_watched, url)
+                m = MetadataGetter(url)
+                metadata = m.get_metadata()
+                video = VideoRecord.create(
+                    title,
+                    creator,
+                    time_watched,
+                    url,
+                    metadata["duration"],
+                    ",".join(metadata["categories"]),
+                    ",".join(metadata["tags"]),
+                )
                 if video is not None:
                     video.save()
+
+
+class MyLogger(object):
+    def debug(self, msg):
+        pass
+
+    def warning(self, msg):
+        pass
+
+    def error(self, msg):
+        print(msg)
+
+
+class MetadataGetter:
+    def __init__(self, url):
+        self.url = url
+
+    def get_metadata(self):
+        ydl_opts = {"logger": MyLogger(), "ignoreerrors": True}
+        with YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.extract_info(self.url, download=False)
+        ret = {"duration": info_dict["duration"], "categories": info_dict["categories"], "tags": info_dict["tags"]}
+        return ret
