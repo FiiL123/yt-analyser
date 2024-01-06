@@ -1,4 +1,5 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import orjson as json
 from django.db.models import Count
@@ -38,7 +39,6 @@ def home(request):
 def upload(request):
     if request.method == "POST":
         form = UploadFileForm(request.POST, request.FILES)
-        # print(request.FILES["file"])
         if form.is_valid():
             path = handle_uploaded_file(request.FILES["file"])
             process_history_json(path)
@@ -61,38 +61,41 @@ def handle_uploaded_file(uploaded_file):
 
 
 def process_history_json(file_path):
-    Creator.objects.all().delete()
-    VideoRecord.objects.all().delete()
     with open(file_path, "r") as f:
         data = json.loads(f.read())
-        print(len(data))
-        for record in data:
-            if "subtitles" in record:
-                title = record["title"][8:]
-                creator_name = record["subtitles"][0]["name"]
-                if c := Creator.objects.filter(name=creator_name):
-                    creator = c.get()
-                    creator.times_watched = creator.times_watched + 1
-                else:
-                    creator = Creator.create(creator_name, record["subtitles"][0]["url"])
-                creator.save()
-                time_watched = record["time"]
-                url = "missing"
-                if "titleUrl" in record:
-                    url = record["titleUrl"]
-                m = MetadataGetter(url)
-                metadata = m.get_metadata()
-                video = VideoRecord.create(
-                    title,
-                    creator,
-                    time_watched,
-                    url,
-                    metadata["duration"],
-                    ",".join(metadata["categories"]),
-                    ",".join(metadata["tags"]),
-                )
-                if video is not None:
-                    video.save()
+        with ThreadPoolExecutor() as executor:
+            executor.map(process_record, data)
+
+
+def process_record(record):
+    if "subtitles" in record:
+        title = record["title"][8:]
+        creator_name = record["subtitles"][0]["name"]
+        time_watched = record["time"]
+        if VideoRecord.objects.filter(title=title, time_watched=time_watched).count() == 0:
+            if c := Creator.objects.filter(name=creator_name):
+                creator = c.get()
+                creator.times_watched = creator.times_watched + 1
+            else:
+                creator = Creator.create(creator_name, record["subtitles"][0]["url"])
+            creator.save()
+            url = "missing"
+            if "titleUrl" in record:
+                url = record["titleUrl"]
+            m = MetadataGetter(url)
+            metadata = m.get_metadata()
+            video = VideoRecord.create(
+                title,
+                creator,
+                time_watched,
+                url,
+                metadata["duration"],
+                ",".join(metadata["categories"]),
+                ",".join(metadata["tags"]),
+            )
+            if video is not None:
+                video.save()
+        print(f"Just processed [{creator_name}]{title} from {time_watched}.")
 
 
 class MyLogger(object):
@@ -112,7 +115,11 @@ class MetadataGetter:
 
     def get_metadata(self):
         ydl_opts = {"logger": MyLogger(), "ignoreerrors": True}
-        with YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(self.url, download=False)
-        ret = {"duration": info_dict["duration"], "categories": info_dict["categories"], "tags": info_dict["tags"]}
-        return ret
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                info_dict = ydl.extract_info(self.url, download=False, process=False)
+            ret = {"duration": info_dict["duration"], "categories": info_dict["categories"], "tags": info_dict["tags"]}
+            return ret
+        except Exception:
+            ret = {"duration": 0, "categories": [], "tags": []}
+            return ret
