@@ -9,20 +9,29 @@ from yt_dlp import YoutubeDL
 from web import settings as web_settings
 from web.analyser.models import Creator, VideoRecord
 
-from .forms import UploadFileForm
+from .forms import DataFilterForm, UploadFileForm
 
 
 def home(request):
+    if request.method == "POST":
+        form = DataFilterForm(request.POST)
+        if form.is_valid():
+            pass
+    else:
+        pass
+    form = DataFilterForm()
+
     top_creators = Creator.objects.order_by("-times_watched")[:10]
     top_videos = (
-        VideoRecord.objects.values("title").annotate(times_watched=Count("title")).order_by("-times_watched")[:10]
+        VideoRecord.objects.values("title", "categories")
+        .annotate(times_watched=Count("title"))
+        .order_by("-times_watched")[:10]
     )
     top_categories = (
         VideoRecord.objects.values("categories")
         .annotate(times_watched=Count("categories"))
         .order_by("-times_watched")[:10]
     )
-
     context = {
         "videos_count": VideoRecord.objects.count(),
         "videos": VideoRecord.objects.all(),
@@ -31,6 +40,7 @@ def home(request):
         "top_creators": top_creators,
         "top_videos": top_videos,
         "top_categories": top_categories,
+        "form": form,
     }
 
     return render(request, "home.html", context)
