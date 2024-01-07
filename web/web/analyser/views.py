@@ -1,4 +1,5 @@
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import orjson as json
@@ -9,7 +10,21 @@ from yt_dlp import YoutubeDL
 from web import settings as web_settings
 from web.analyser.models import Creator, VideoRecord
 
+from .empyLogger import Logger
 from .forms import DataFilterForm, UploadFileForm
+
+ydl_opts = {
+    "logger": Logger(),
+    "ignoreerrors": True,
+    "extractor_args": {
+        "youtube": {"skip": ["translated_subs", "hls", "dash"], "player_skip": ["configs", "webpage", "js"]}
+    },
+}
+ydls = []
+for _ in range(32):
+    ydls.append(YoutubeDL(ydl_opts))
+
+yd_counter = 0
 
 
 def home(request):
@@ -73,11 +88,12 @@ def handle_uploaded_file(uploaded_file):
 def process_history_json(file_path):
     with open(file_path, "r") as f:
         data = json.loads(f.read())
-        with ThreadPoolExecutor() as executor:
+        with ThreadPoolExecutor(max_workers=32) as executor:
             executor.map(process_record, data)
 
 
 def process_record(record):
+    start = time.time()
     if "subtitles" in record:
         title = record["title"][8:]
         creator_name = record["subtitles"][0]["name"]
@@ -92,8 +108,7 @@ def process_record(record):
             url = "missing"
             if "titleUrl" in record:
                 url = record["titleUrl"]
-            m = MetadataGetter(url)
-            metadata = m.get_metadata()
+            metadata = get_metadata(url)
             video = VideoRecord.create(
                 title,
                 creator,
@@ -105,31 +120,20 @@ def process_record(record):
             )
             if video is not None:
                 video.save()
-        print(f"Just processed [{creator_name}]{title} from {time_watched}.")
+        end = time.time()
+        dur = end - start
+        print(f"Just processed {dur} [{creator_name}]{title} from {time_watched}.")
 
 
-class MyLogger(object):
-    def debug(self, msg):
-        pass
-
-    def warning(self, msg):
-        pass
-
-    def error(self, msg):
-        print(msg)
-
-
-class MetadataGetter:
-    def __init__(self, url):
-        self.url = url
-
-    def get_metadata(self):
-        ydl_opts = {"logger": MyLogger(), "ignoreerrors": True}
-        try:
-            with YoutubeDL(ydl_opts) as ydl:
-                info_dict = ydl.extract_info(self.url, download=False, process=False)
-            ret = {"duration": info_dict["duration"], "categories": info_dict["categories"], "tags": info_dict["tags"]}
-            return ret
-        except Exception:
-            ret = {"duration": 0, "categories": [], "tags": []}
-            return ret
+def get_metadata(url):
+    global yd_counter
+    ydl = ydls[yd_counter % 32]
+    yd_counter += 1
+    try:
+        info_dict = ydl.extract_info(url, download=False, process=False)
+        ret = {"duration": info_dict["duration"], "categories": info_dict["categories"], "tags": info_dict["tags"]}
+        return ret
+    except Exception:
+        print("FAILED GETTING METADATA")
+        ret = {"duration": 0, "categories": [], "tags": []}
+        return ret
